@@ -29,6 +29,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelUuid;
 import android.os.Process;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.NotificationCompat;
@@ -39,6 +40,7 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @TargetApi(21)
 public class MyService extends Service {
@@ -52,6 +54,8 @@ public class MyService extends Service {
     private ScanSettings settings;
     private List<ScanFilter> filters;
     private BluetoothGatt mGatt;
+    private HandlerThread thread;
+    private boolean running;
 
     // Handler that receives messages from the thread
     private final class ServiceHandler extends Handler {
@@ -72,20 +76,18 @@ public class MyService extends Service {
                     (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
             mBluetoothAdapter = bluetoothManager.getAdapter();
 
-            {
-                if (Build.VERSION.SDK_INT >= 21) {
-                    mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
-                    settings = new ScanSettings.Builder()
-                            .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-                            .build();
-                    filters = new ArrayList<ScanFilter>();
-                }
-                scanLeDevice(true);
+            if (Build.VERSION.SDK_INT >= 21) {
+                mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
+                settings = new ScanSettings.Builder()
+                        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+                        .build();
+                filters = new ArrayList<ScanFilter>();
             }
+            scanLeDevice(true);
 
             // Stop the service using the startId, so that we don't stop
             // the service in the middle of handling another job
-            stopSelf(msg.arg1);
+//            stopSelf(msg.arg1);
         }
     }
 
@@ -94,6 +96,10 @@ public class MyService extends Service {
         public void onScanResult(int callbackType, ScanResult result) {
             Log.i("callbackType", String.valueOf(callbackType));
             Log.i("result", result.toString());
+
+            if (result.getDevice().getName() == null || !result.getDevice().getName().equals("CLARITY"))
+                return;
+
 //            tv.setText(appendText(tv.getText().toString(), "callbackType", String.valueOf(callbackType)));
 ////            tv.setText(appendText(tv.getText().toString(), "result", result.toString()));
 //            tv.setText(appendText(tv.getText().toString(), "Device", result.getDevice().toString()));
@@ -103,7 +109,26 @@ public class MyService extends Service {
 
             Log.i("Device", result.getDevice().toString());
             Log.i("MSD", dataToString(tmp));
-            showNotification(result.getDevice().toString(), dataToString(tmp));
+            String str = "";
+            Map<ParcelUuid, byte[]>  map = result.getScanRecord().getServiceData();
+            for (Map.Entry<ParcelUuid, byte[]> entry : map.entrySet()) {
+                str += entry.getKey();
+                str += "=";
+                str += bytesToHex(entry.getValue());
+            }
+
+//            showNotification(dataToString(tmp), str);
+            String[] strarr = parseData(dataToString(tmp));
+            if (strarr == null) {
+                strarr = parseData(str);
+            }
+            if (strarr == null)
+                showNotification(result.getDevice().toString(), "No data");
+            else{
+                showNotification(result.getDevice().toString(), strarr[0] + "-" + strarr[1] + "/" + strarr[2]);
+            }
+
+            MainActivity.appendTV(result.toString());
 
             BluetoothDevice btDevice = result.getDevice();
             connectToDevice(btDevice);
@@ -112,13 +137,13 @@ public class MyService extends Service {
         @Override
         public void onBatchScanResults(List<ScanResult> results) {
             for (ScanResult sr : results) {
-                showNotification("ScanResult - Results", sr.toString());
+//                showNotification("ScanResult - Results", sr.toString());
             }
         }
 
         @Override
         public void onScanFailed(int errorCode) {
-            showNotification("Scan Failed", "Error Code: " + errorCode);
+//            showNotification("Scan Failed", "Error Code: " + errorCode);
         }
     };
 
@@ -138,19 +163,19 @@ public class MyService extends Service {
                 case BluetoothProfile.STATE_CONNECTED:
 //                    Log.i("gattCallback", "STATE_CONNECTED");
 //                    tv.setText(appendText(tv.getText().toString(), "gattCallback", "STATE_CONNECTED"));
-                    showNotification("gattCallback", "STATE_CONNECTED");
+//                    showNotification("gattCallback", "STATE_CONNECTED");
                     gatt.discoverServices();
                     break;
                 case BluetoothProfile.STATE_DISCONNECTED:
 //                    Log.e("gattCallback", "STATE_DISCONNECTED");
 //                    tv.setText(appendText(tv.getText().toString(), "gattCallback", "STATE_DISCONNECTED"));
-                    showNotification("gattCallback", "STATE_DISCONNECTED");
+//                    showNotification("gattCallback", "STATE_DISCONNECTED");
 
                     break;
                 default:
 //                    Log.e("gattCallback", "STATE_OTHER");
 //                    tv.setText(appendText(tv.getText().toString(), "gattCallback", "STATE_OTHER"));
-                    showNotification("gattCallback", "STATE_OTHER");
+//                    showNotification("gattCallback", "STATE_OTHER");
             }
 
         }
@@ -160,7 +185,7 @@ public class MyService extends Service {
             List<BluetoothGattService> services = gatt.getServices();
 //            Log.i("onServicesDiscovered", services.toString());
 //            tv.setText(appendText(tv.getText().toString(), "onServicesDiscovered", services.toString()));
-            showNotification("onServicesDiscovered", services.toString());
+//            showNotification("onServicesDiscovered", services.toString());
             gatt.readCharacteristic(services.get(1).getCharacteristics().get
                     (0));
         }
@@ -171,7 +196,7 @@ public class MyService extends Service {
                                                  characteristic, int status) {
 //            Log.i("onCharacteristicRead", characteristic.toString());
 //            tv.setText(appendText(tv.getText().toString(), "onCharacteristicRead", characteristic.toString()));
-            showNotification("onCharacteristicRead", characteristic.toString());
+//            showNotification("onCharacteristicRead", characteristic.toString());
             gatt.disconnect();
         }
     };
@@ -186,7 +211,8 @@ public class MyService extends Service {
                     } else {
                         mLEScanner.stopScan(mScanCallback);
                     }
-                    scanLeDevice(true);
+                    if (running)
+                        scanLeDevice(true);
                 }
             }, SCAN_PERIOD);
             if (Build.VERSION.SDK_INT < 21) {
@@ -227,8 +253,9 @@ public class MyService extends Service {
         // separate thread because the service normally runs in the process's
         // main thread, which we don't want to block.  We also make it
         // background priority so CPU-intensive work will not disrupt our UI.
-        HandlerThread thread = new HandlerThread("ServiceStartArguments",
+        thread = new HandlerThread("ServiceStartArguments",
                 Process.THREAD_PRIORITY_BACKGROUND);
+        running = true;
         thread.start();
 
         // Get the HandlerThread's Looper and use it for our Handler
@@ -238,7 +265,7 @@ public class MyService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Toast.makeText(this, "service starting", Toast.LENGTH_SHORT).show();
+//        Toast.makeText(this, "service starting", Toast.LENGTH_SHORT).show();
 
         // For each start request, send a message to start a job and deliver the
         // start ID so we know which request we're stopping when we finish the job
@@ -246,8 +273,19 @@ public class MyService extends Service {
         msg.arg1 = startId;
         mServiceHandler.sendMessage(msg);
 
-        // If we get killed, after returning from here, restart
-        return START_STICKY;
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+        Notification noti = new Notification.Builder(this)
+                .setContentTitle("Demo service")
+                .setContentText("Running...")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentIntent(pendingIntent)
+                .build();
+        startForeground(0xff, noti);
+        return Service.START_STICKY;
+
+//        // If we get killed, after returning from here, restart
+//        return START_STICKY;
     }
 
     @Override
@@ -258,6 +296,11 @@ public class MyService extends Service {
 
     @Override
     public void onDestroy() {
+        running = false;
+
+        if (mBluetoothAdapter != null && mBluetoothAdapter.isEnabled()) {
+            scanLeDevice(false);
+        }
         if (mGatt == null) {
             return;
         }
@@ -328,5 +371,28 @@ public class MyService extends Service {
         }
         buffer.append('}');
         return buffer.toString();
+    }
+
+    private String[] parseData(String str){
+        String a[] = str.split("=");
+        if (a[1] == null)
+            return null;
+        str = a[1];
+        str = str.substring(0, 12);
+        str = str.toUpperCase();
+
+        String str1 = str.substring(0, 4);
+        String str2 = str.substring(4, 8);
+        String str3 = str.substring(8, 12);
+
+        str1 = str1.substring(2, 4) + str1.substring(0, 2);
+        str2 = str2.substring(2, 4) + str2.substring(0, 2);
+        str3 = str3.substring(2, 4) + str3.substring(0, 2);
+
+        String[] ret = new String[3];
+        ret[0] = str1;
+        ret[1] = Integer.valueOf(str2,16).toString();
+        ret[2] = Integer.valueOf(str3,16).toString();
+        return ret;
     }
 }

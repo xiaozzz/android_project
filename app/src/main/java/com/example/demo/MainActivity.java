@@ -14,20 +14,22 @@ import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.NotificationCompat;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 
 
 @TargetApi(21)
 public class MainActivity extends ActionBarActivity {
     private int REQUEST_ENABLE_BT = 1;
+    public static TextView tv;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Button bt = (Button)findViewById(R.id.button_on);
-        if (bt != null)
-            bt.setOnClickListener(new View.OnClickListener() {
+        Button bt_on = (Button)findViewById(R.id.button_on);
+        if (bt_on != null)
+            bt_on.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     Intent intent = new Intent(MainActivity.this, MyService.class);
@@ -35,6 +37,22 @@ public class MainActivity extends ActionBarActivity {
                 }
             });
 
+        Button bt_off = (Button)findViewById(R.id.button_off);
+        if (bt_off != null)
+            bt_off.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this, MyService.class);
+                    stopService(intent);
+                }
+            });
+
+        tv = (TextView)findViewById(R.id.tv);
+
+    }
+
+    public static void appendTV(String str){
+        tv.append(str);
     }
 
     @Override
